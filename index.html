@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#172033">
+<title>Entrega VIS</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:#172033;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #e4e7ec;padding:14px 16px}
+main{max-width:760px;margin:auto;padding:14px 14px 100px}h1{font-size:20px;margin:0}.muted{color:#667085;font-size:13px}
+.progress{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin-bottom:10px}
+.progressrow{display:flex;justify-content:space-between;font-size:13px}.bar{height:10px;background:#eaecf0;border-radius:99px;margin-top:8px;overflow:hidden}.fill{height:100%;background:#344054;width:0;transition:.2s}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.meta input,.search,textarea{width:100%;border:1px solid #d0d5dd;border-radius:10px;padding:11px;font:inherit;background:#fff}
+.search{margin:0 0 8px}.tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px}.tools button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 11px;font-weight:600;cursor:pointer;}
+.section h2{font-size:17px;margin:20px 0 8px}.card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:14px;margin:9px 0}
+.itemtitle{font-weight:700}.desc{font-size:13px;color:#667085;line-height:1.4;margin:6px 0 10px}
+.status{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.status button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:11px 4px;font-weight:700;cursor:pointer;}
+.status .ok{background:#e8f5ee;border-color:#84c9a5;color:#16794a}.status .bad{background:#fdecec;border-color:#f0a6a2;color:#b42318}.status .na{background:#f2f4f7;border-color:#cfd4dc;color:#475467}
+textarea{margin-top:10px;min-height:68px;resize:vertical}.photo{display:inline-block;border:1px solid #d0d5dd;border-radius:10px;padding:10px 12px;margin-top:9px;font-weight:700;background:#fff;cursor:pointer;}.photo input{display:none}
+.thumbs{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.thumb{width:74px;height:74px;object-fit:cover;border-radius:9px;border:1px solid #ddd;cursor:pointer;}
+.bottom{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;padding:9px;display:flex;justify-content:center;z-index:5}.bottom button{background:#172033;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700;width:100%;max-width:380px;cursor:pointer;}
+@media(max-width:500px){.meta{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>🏠 Entrega VIS</h1><div class="muted">Checklist de inspección — obra gris</div></header>
+<main>
+    <div class="progress">
+        <div class="progressrow"><b>Progreso</b><span id="p">0 / 0</span></div>
+        <div class="bar"><div id="fill" class="fill"></div></div>
+        <div class="meta">
+            <input id="tower" placeholder="Torre / bloque">
+            <input id="apt" placeholder="Apartamento">
+            <input id="date" type="date">
+            <input id="person" placeholder="Inspector / comprador">
+        </div>
+    </div>
+
+    <!-- UI selector de apartamentos -->
+    <div style="background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size: 13px; font-weight: bold;">Apartamento:</span>
+        <select id="selectApto" onchange="cambiarProyecto(this.value)" style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #d0d5dd; font-weight: bold;"></select>
+        <button onclick="nuevoApartamento()" style="background: #16794a; color: white; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer;">➕ Nuevo</button>
+        <button onclick="eliminarApartamento()" style="background: #b42318; color: white; border: none; border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer;" title="Eliminar actual">🗑️</button>
+    </div>
+
+    <input id="search" class="search" placeholder="🔎 Buscar elemento o categoría…">
+    <div class="tools">
+        <button onclick="setFilter('all')">Todos</button>
+        <button onclick="setFilter('bad')">No cumple</button>
+        <button onclick="setFilter('pending')">Pendientes</button>
+        <button onclick="backup()">💾 Respaldo</button>
+        <button onclick="document.getElementById('restore').click()">↥ Importar</button>
+        <input id="restore" type="file" accept=".json" hidden>
+    </div>
+    
+    <div id="app"></div>
+</main>
+<div class="bottom"><button onclick="makeReport()">📋 Generar reporte</button></div>
+
+<script>
+const ITEMS=[{"area": "Información general", "item": "Identificación del inmueble", "description": "Verificar torre/bloque, piso, apartamento, nomenclatura y coincidencia con documentos de entrega."}, {"area": "Estructura", "item": "Pisos y losas", "description": "Revisar que no haya hundimientos, desniveles anormales, fisuras relevantes, desprendimientos o zonas con humedad."}, {"area": "Estructura", "item": "Muros", "description": "Revisar verticalidad aparente, fisuras, grietas, golpes, desprendimientos y acabados de obra gris."}, {"area": "Estructura", "item": "Columnas/pórticos/muros estructurales", "description": "Inspeccionar visualmente fisuras, golpes, desprendimientos, exposición de acero o intervenciones no autorizadas."}, {"area": "Estructura", "item": "Vigas y placas", "description": "Revisar visualmente fisuras, desprendimientos, filtraciones y deformaciones aparentes."}, {"area": "Estructura", "item": "Techo/cielo de obra gris", "description": "Revisar fisuras, humedad, filtraciones, manchas y acabado uniforme."}, {"area": "Estructura", "item": "Juntas y encuentros", "description": "Revisar juntas entre elementos, muros y losas; verificar que no existan separaciones o fisuras anormales."}, {"area": "Estructura", "item": "Muros y pisos general", "description": "Buscar manchas, salitre, recubrimientos desprendidos, humedad visible o zonas húmedas sin causa aparente."}, {"area": "Estructura", "item": "Baños y zonas húmedas", "description": "Revisar filtraciones, humedad en muros contiguos y puntos de conexión hidráulica y sanitaria, verificar pendiente para desagüe en balcón, baño social enchapado."}, {"area": "Estructura", "item": "Fachada/ventanas", "description": "Revisar señales de ingreso de agua alrededor de marcos, antepechos y encuentros con fachada, revisar que cuente con sello de silicona en la fachada, alrededor del marco, revisar que los vidrios no se encuentren quebrados, con grietas, rayones, desajustes, verificar que no se dificulte el cierre de ventanas."}, {"area": "Instalación eléctrica", "item": "Tablero eléctrico", "description": "Verificar ubicación, fijación, estado físico, identificación de circuitos y acceso seguro, identificar las zonas que prenden y apagan cada uno de los breakers, realizar marcación de zonas."}, {"area": "Instalación eléctrica", "item": "Tomacorrientes", "description": "Revisar cantidad, ubicación, fijación, tapas, estado físico y funcionamiento con un probador adecuado en todas las zonas del apartamento."}, {"area": "Instalación eléctrica", "item": "Interruptores", "description": "Revisar cantidad, ubicación, fijación, tapas y funcionamiento en todas las zonas del apartamento."}, {"area": "Instalación eléctrica", "item": "Puntos de iluminación", "description": "Verificar existencia y ubicación de salidas, cajas, tapas o terminales previstos, verificar funcionamiento en todas las zonas del apartamento."}, {"area": "Instalación eléctrica", "item": "Puntos de TV/datos", "description": "Verificar cajas, placas, ductos."}, {"area": "Instalación eléctrica", "item": "Puesta a tierra", "description": "Verificar que el sistema y sus elementos visibles estén instalados conforme a la documentación; solicitar prueba/certificación."}, {"area": "Acueducto", "item": "Medidor de agua", "description": "Verificar existencia, identificación, lectura inicial en cero o cercana a cero, ubicación, marcación y estado físico."}, {"area": "Acueducto", "item": "Llave de corte general", "description": "Localizar, accionar y comprobar que permita cerrar el suministro sin fugas."}, {"area": "Acueducto", "item": "Red de agua", "description": "Revisar tuberías visibles, uniones, fijaciones y ausencia de fugas."}, {"area": "Acueducto", "item": "Puntos hidráulicos", "description": "Verificar ubicación, altura, tapones y estado de cada punto de agua de cada zona del apartamento. que no existan fugas, que se encuentren limpios y nuevos, ninguna fisura o restos de material."}, {"area": "Acueducto", "item": "Presión y caudal", "description": "Abrir puntos disponibles y comprobar funcionamiento general, con buena presión."}, {"area": "Desagüe", "item": "Sifones/puntos de desagüe", "description": "Verificar ubicación, estado, tapones y ausencia de olores o filtraciones, verificar la correcta evacuación del agua en todos los puntos de desagüe del apartamento."}, {"area": "Desagüe", "item": "Rejillas y sumideros", "description": "Revisar fijación, nivelación, limpieza y evacuación."}, {"area": "Gas", "item": "Medidor de gas", "description": "Verificar existencia, identificación, estado físico y lectura inicial en cero."}, {"area": "Gas", "item": "Llave de corte", "description": "Localizar y comprobar acceso y funcionamiento."}, {"area": "Gas", "item": "Hornillas", "description": "Verificar ubicación, conexión, fijación y ausencia de olor a gas."}, {"area": "Gas", "item": "Tuberías visibles", "description": "Revisar golpes, corrosión, uniones, fijaciones y daños aparentes."}, {"area": "Gas", "item": "Ventilación", "description": "Verificar que rejillas o elementos de ventilación previstos estén libres y sin obstrucciones."}, {"area": "Gas", "item": "Certificado ", "description": "Solicitar/confirmar prueba y certificación correspondiente."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Revisar que no haya vidrios rotos, fisurados, rayados o con defectos visibles."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Revisar golpes, deformaciones, corrosión, fijación y acabado en marcos."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Inspeccionar silicona/sellos y encuentros para detectar discontinuidades o posibles entradas de agua."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Operar cada hoja de la ventaneria, verificar suavidad, alineación y cierre completo."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Revisar manijas, seguros, bisagras, rodamientos y demás accesorios."}, {"area": "Mobiliario", "item": "Ventanas", "description": "Revisar señales de filtración y realizar prueba de agua."}, {"area": "Mobiliario", "item": "Puerta de acceso", "description": "Revisar hoja, marco, nivelación, cierre, cerradura, bisagras y acabado, que no tenga abolladuras, ni rayones, ni despiques en los cantos, que ingrese bien la llave y salga con facilidad."}, {"area": "Mobiliario", "item": "Puertas interiores", "description": "Revisar hoja, marco, nivelación, cierre, cerradura, bisagras y acabado, que no tenga abolladuras, ni rayones, ni despiques en los cantos."}, {"area": "Mobiliario", "item": "Mesón", "description": "Verificar nivelación, fijación, puertas, cajones y daños."}, {"area": "Mobiliario", "item": "Timbre/citofono", "description": "Verificar funcionamiento y ubicación "}, {"area": "Acabados ", "item": "Piso", "description": "Revisar estado, nivelación, pendientes hacia desagüe, piezas sueltas o dañadas."}, {"area": "Acabados ", "item": "Muros/enchapes", "description": "Revisar piezas, juntas, golpes, fisuras, desprendimientos y encuentros."}, {"area": "Acabados ", "item": "Sanitario", "description": "Verificar fijación, nivelación, descarga, llenado y ausencia de fugas."}, {"area": "Acabados ", "item": "Lavamanos", "description": "Verificar fijación, nivelación, grifería, desagüe y ausencia de fugas."}, {"area": "Acabados ", "item": "Ducha", "description": "Comprobar apertura/cierre, caudal, fugas y funcionamiento."}, {"area": "Acabados ", "item": "Accesorios", "description": "Verificar espejo, toallero, portapapel u otros."}, {"area": "Acabados ", "item": "Impermeabilización", "description": "Buscar señales de humedad y solicitar soporte/certificación."}, {"area": "Seguridad", "item": "Barandas/protecciones", "description": "Revisar fijación, estabilidad y ausencia de elementos sueltos en balcones o zonas con riesgo de caída."}, {"area": "Seguridad", "item": "Balcones", "description": "Revisar piso, pendientes, desagües, barandas y señales de filtración."}, {"area": "Seguridad", "item": "Elementos contra incendio", "description": "Verificar detectores, rociadores, gabinetes u otros elementos que correspondan a la entrega y zonas comunes; registrar lo observable desde el apartamento."}, {"area": "Información general", "item": "Planos y especificaciones", "description": "Solicitar planos, memoria de acabados, manual del propietario y documentos técnicos que correspondan."}, {"area": "Información general", "item": "Certificados de instalaciones", "description": "Solicitar certificados o soportes aplicables de instalaciones eléctricas, gas, hidráulicas y demás sistemas entregados."}, {"area": "Información general", "item": "Garantías", "description": "Solicitar procedimiento, canales y plazos para reportar garantías y posventas."}, {"area": "Entrega", "item": "Acta de entrega", "description": "Registrar todas las observaciones en el acta antes de firmar y conservar copia."}];
+
+const STORAGE_KEY = 'entregaVIS_proyectos_v3';
+
+let proyectos = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+let currentId = Object.keys(proyectos)[0];
+
+if (!currentId) {
+    currentId = 'Apto_101';
+    proyectos[currentId] = { meta: { tower: 'Torre 1', apt: '101' }, items: {}, photos: {} };
+    saveAll();
+}
+
+let S = proyectos[currentId];
+let filter = 'all', q = '';
+
+function saveAll() {
+    proyectos[currentId] = S;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(proyectos));
+    progress();
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+function st(i) { return S.items[i]?.status || ''; }
+
+function setst(i, v) {
+    S.items[i] = { ...(S.items[i] || {}), status: v };
+    saveAll();
+    render();
+}
+
+function note(i, v) { 
+    S.items[i] = { ...(S.items[i] || {}), note: v }; 
+    saveAll(); 
+}
+
+function setFilter(f) { filter = f; render(); }
+
+function progress() {
+    let d = Object.values(S.items).filter(x => x.status).length;
+    document.getElementById('p').textContent = d + ' / ' + ITEMS.length;
+    document.getElementById('fill').style.width = (d / ITEMS.length * 100) + '%';
+}
+
+function cambiarProyecto(id) {
+    if(!id) return;
+    currentId = id;
+    S = proyectos[currentId];
+    document.getElementById('tower').value = S.meta.tower || '';
+    document.getElementById('apt').value = S.meta.apt || '';
+    document.getElementById('date').value = S.meta.date || '';
+    document.getElementById('person').value = S.meta.person || '';
+    actualizarSelectorProyectos();
+    render();
+    progress();
+}
+
+function nuevoApartamento() {
+    let nombre = prompt("Ingresa el nombre o identificador del nuevo apartamento (Ej: Torre 2 - Apto 302):");
+    if(!nombre) return;
+    let nuevoKey = 'apto_' + Date.now();
+    proyectos[nuevoKey] = { meta: { tower: '', apt: nombre }, items: {}, photos: {} };
+    currentId = nuevoKey;
+    S = proyectos[currentId];
+    saveAll();
+    actualizarSelectorProyectos();
+    cambiarProyecto(currentId);
+}
+
+function eliminarApartamento() {
+    let keys = Object.keys(proyectos);
+    if(keys.length <= 1) {
+        alert("Debes tener al menos un registro guardado, no se puede eliminar el último.");
+        return;
+    }
+    if(confirm("¿Estás seguro de eliminar todo el registro y fotos de este apartamento?")) {
+        delete proyectos[currentId];
+        currentId = Object.keys(proyectos)[0];
+        S = proyectos[currentId];
+        saveAll();
+        actualizarSelectorProyectos();
+        cambiarProyecto(currentId);
+    }
+}
+
+function actualizarSelectorProyectos() {
+    let sel = document.getElementById('selectApto');
+    if(!sel) return;
+    sel.innerHTML = '';
+    Object.entries(proyectos).forEach(([id, proj]) => {
+        let opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = (proj.meta.tower ? proj.meta.tower + ' - ' : '') + (proj.meta.apt ? 'Apto ' + proj.meta.apt : id);
+        if(id === currentId) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+function render() {
+    let app = document.getElementById('app');
+    app.innerHTML = '';
+    let groups = {};
+    
+    const removeAccents = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    let searchQ = removeAccents(q);
+
+    ITEMS.forEach((x, i) => {
+        let s = st(i);
+        let ok = (filter === 'all' || (filter === 'bad' && s === 'bad') || (filter === 'pending' && !s));
+        let text = removeAccents(x.area + ' ' + x.item + ' ' + x.description);
+        
+        if (ok && (!searchQ || text.includes(searchQ))) {
+            groups[x.area] = groups[x.area] || [];
+            groups[x.area].push(i);
+        }
+    });
+
+    if (!Object.keys(groups).length) {
+        app.innerHTML = '<div class="muted" style="text-align:center;padding:30px">No hay elementos para mostrar.</div>';
+        return;
+    }
+    
+    Object.entries(groups).forEach(([area, idxs]) => {
+        let sec = document.createElement('section');
+        sec.className = 'section';
+        sec.innerHTML = `<h2>${esc(area)}</h2>`;
+        idxs.forEach(i => sec.appendChild(makeCard(i)));
+        app.appendChild(sec);
+    });
+}
+
+function makeCard(i) {
+    let x = ITEMS[i], s = st(i), n = S.items[i]?.note || '';
+    let c = document.createElement('article');
+    c.className = 'card';
+    
+    c.innerHTML = `
+        <div class="itemtitle">${esc(x.item)}</div>
+        <div class="desc">${esc(x.description)}</div>
+        <div class="status">
+            <button class="${s==='ok'?'ok':''}" onclick="setst(${i}, 'ok')">✓ Cumple</button>
+            <button class="${s==='bad'?'bad':''}" onclick="setst(${i}, 'bad')">✕ No cumple</button>
+            <button class="${s==='na'?'na':''}" onclick="setst(${i}, 'na')">— N/A</button>
+        </div>
+        <textarea placeholder="Observaciones…" oninput="note(${i}, this.value)">${esc(n)}</textarea>
+        <label class="photo">📷 Agregar foto<input type="file" accept="image/*" capture="environment" onchange="addPhoto(${i}, this)"></label>
+        <div class="thumbs" id="t${i}"></div>
+    `;
+    setTimeout(() => thumbs(i), 0);
+    return c;
+}
+
+function addPhoto(i, input) {
+    let a = S.photos[i] || [];
+    [...input.files].forEach(f => {
+        let r = new FileReader();
+        r.onload = () => { a.push(r.result); S.photos[i] = a; saveAll(); thumbs(i); };
+        r.readAsDataURL(f);
+    });
+    input.value = '';
+}
+
+function thumbs(i) {
+    let e = document.getElementById('t' + i);
+    if (!e) return;
+    e.innerHTML = (S.photos[i] || []).map((x, k) => `
+        <img class="thumb" src="${x}" title="Toca para eliminar" onclick="if(confirm('¿Eliminar foto?')){S.photos[${i}].splice(${k},1);saveAll();thumbs(${i})}">
+    `).join('');
+}
+
+function backup() {
+    let b = new Blob([JSON.stringify(proyectos)], { type: 'application/json' });
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = 'respaldo_todos_los_apartamentos.json';
+    a.click();
+}
+
+document.getElementById('restore').onchange = e => {
+    let f = e.target.files[0];
+    if (!f) return;
+    let r = new FileReader();
+    r.onload = () => {
+        try {
+            proyectos = JSON.parse(r.result);
+            currentId = Object.keys(proyectos)[0];
+            S = proyectos[currentId];
+            saveAll();
+            location.reload();
+        } catch { alert('Respaldo inválido'); }
+    };
+    r.readAsText(f);
+};
+
+document.getElementById('search').oninput = e => { q = e.target.value; render(); };
+
+['tower', 'apt', 'date', 'person'].forEach(k => {
+    let el = document.getElementById(k);
+    if(el) {
+        el.value = S.meta[k] || '';
+        el.oninput = e => { 
+            S.meta[k] = e.target.value; 
+            saveAll(); 
+            actualizarSelectorProyectos();
+        };
+    }
+});
+
+function makeReport() {
+    let ok = 0, bad = 0, na = 0, pending = 0;
+    let hallazgos = []; 
+    let contadorHallazgos = 1;
+
+    ITEMS.forEach((x, i) => {
+        let s = st(i);
+        if(s === 'ok') ok++;
+        else if(s === 'bad'){
+            bad++;
+            hallazgos.push({ numero: String(contadorHallazgos).padStart(3, '0'), item: x, index: i });
+            contadorHallazgos++;
+        }
+        else if(s === 'na') na++;
+        else pending++;
+    });
+
+    let h = `
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Reporte Entrega VIS</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 30px; color: #172033; line-height: 1.5; }
+            .item { border: 1px solid #ddd; border-radius: 9px; padding: 16px; margin: 15px 0; break-inside: avoid; }
+            .bad { border-left: 6px solid #b42318; background-color: #fcf8f8; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+            .photos { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+            .photos figure { margin: 0; text-align: center; }
+            .photos img { width: 150px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #ccc; }
+            .print { padding: 12px 20px; background: #172033; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-bottom: 25px; font-weight: bold;}
+            .header-info { background: #f2f4f7; padding: 18px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #e4e7ec; }
+            @media print { .print { display: none; } body { margin: 0; } }
+        </style>
+    </head>
+    <body>
+        <button class="print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+        <h1 style="margin-top:0;">📋 Reporte de Inspección — Apartamento VIS</h1>
+        <div class="header-info">
+            <p style="margin:5px 0;"><b>Torre/Bloque:</b> ${esc(S.meta.tower||'—')} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Apartamento:</b> ${esc(S.meta.apt||'—')}</p>
+            <p style="margin:5px 0;"><b>Fecha:</b> ${esc(S.meta.date||'—')} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Inspector/Comprador:</b> ${esc(S.meta.person||'—')}</p>
+            <hr style="border: 0; border-top: 1px solid #d0d5dd; margin: 12px 0;">
+            <p style="margin:5px 0;"><b>Resumen:</b> 
+                <span style="color:#16794a">✓ Cumple: ${ok}</span> &nbsp;&nbsp; 
+                <span style="color:#b42318">✕ No cumple: ${bad}</span> &nbsp;&nbsp; 
+                <span style="color:#475467">— N/A: ${na}</span> &nbsp;&nbsp; 
+                <span style="color:#d97706">Pendientes: ${pending}</span>
+            </p>
+        </div>
+    `;
+
+    if (hallazgos.length > 0) {
+        h += `<h2 style="color:#b42318; border-bottom: 2px solid #b42318; padding-bottom: 5px;">🚨 Registro de Hallazgos</h2>`;
+        hallazgos.forEach(hItem => {
+            let i = hItem.index;
+            let data = S.items[i] || {};
+            let obs = data.note ? esc(data.note).replace(/\n/g, '<br>') : '<i>Sin observación registrada.</i>';
+            let fotosHtml = '';
+            let fotosArray = S.photos[i] || [];
+            if(fotosArray.length > 0){
+                fotosHtml = `<div class="photos">` + fotosArray.map((p, idx) => `
+                    <figure>
+                        <img src="${p}">
+                        <figcaption style="font-size:12px; color:#666; margin-top:4px; font-weight:bold;">📷 Foto: ${hItem.numero}-${idx+1}</figcaption>
+                    </figure>
+                `).join('') + `</div>`;
+            } else {
+                fotosHtml = '<p style="color:#666; font-size:13px; margin-top:10px;"><i>📷 Sin foto adjunta</i></p>';
+            }
+
+            h += `
+            <div class="item bad">
+                <h3 style="margin-top:0; margin-bottom:12px; color:#b42318; font-size: 20px;">Hallazgo #${hItem.numero}</h3>
+                <p style="margin:6px 0;"><b>Categoría:</b> ${esc(hItem.item.area)}</p>
+                <p style="margin:6px 0;"><b>Elemento:</b> ${esc(hItem.item.item)}</p>
+                <p style="margin:6px 0;"><b>Estado:</b> <span style="background:#b42318; color:white; padding: 2px 6px; border-radius: 4px; font-size:13px; font-weight:bold;">NO CUMPLE</span></p>
+                <p style="margin:6px 0; margin-bottom: 12px;"><b>Observación:</b> ${obs}</p>
+                ${fotosHtml}
+            </div>`;
+        });
+        h += `<br>`;
+    }
+
+    h += `<h2 style="border-bottom: 2px solid #172033; padding-bottom: 5px;">Detalle Completo de la Revisión</h2>`;
+    let areas = {};
+    ITEMS.forEach((x, i) => {
+        areas[x.area] = areas[x.area] || [];
+        areas[x.area].push(i);
+    });
+    
+    for (let [a, ix] of Object.entries(areas)) {
+        h += `<h3 style="background:#f9fafb; padding:10px; border-radius:6px; margin-top: 25px;">${esc(a)}</h3>`;
+        ix.forEach(i => {
+            let s = st(i) || 'pending';
+            let label = s==='ok'?'✓ CUMPLE': s==='bad'?'✕ NO CUMPLE': s==='na'?'— N/A':'PENDIENTE';
+            let color = s==='ok'?'#16794a': s==='bad'?'#b42318': s==='na'?'#475467':'#d97706';
+            
+            if (s === 'bad') {
+                let hallazgoAsignado = hallazgos.find(ha => ha.index === i);
+                h += `
+                <div style="padding: 10px 0; border-bottom: 1px dashed #e4e7ec;">
+                    <b>${esc(ITEMS[i].item)}</b> 
+                    <span style="float:right; color:${color}; font-weight:bold;">${label} (Ver Hallazgo #${hallazgoAsignado.numero})</span>
+                </div>`;
+            } else {
+                let it = S.items[i] || {};
+                let fotosRestantes = S.photos[i] || [];
+                let fotosMiniHtml = fotosRestantes.length > 0 
+                    ? `<div class="photos" style="margin-top:8px;">` + fotosRestantes.map(p => `<img style="width:70px; height:70px; border-radius:4px;" src="${p}">`).join('') + `</div>` 
+                    : '';
+
+                h += `
+                <div style="padding: 12px 0; border-bottom: 1px solid #e4e7ec;">
+                    <div style="margin-bottom:4px;"><b>${esc(ITEMS[i].item)}</b></div>
+                    <div style="font-size:13px; color:#667085; margin-bottom:6px;">${esc(ITEMS[i].description)}</div>
+                    <div style="margin-top: 4px;"><b>Estado:</b> <span style="color:${color}; font-weight:bold;">${label}</span></div>
+                    ${it.note ? `<div style="margin-top:6px; font-size:14px; background:#f9fafb; padding:8px; border-radius:4px;"><b>Obs:</b> ${esc(it.note)}</div>` : ''}
+                    ${fotosMiniHtml}
+                </div>`;
+            }
+        });
+    }
+    
+    h += '</body></html>';
+    let w = window.open('', '_blank');
+    w.document.write(h);
+    w.document.close();
+}
+
+actualizarSelectorProyectos();
+cambiarProyecto(currentId);
+</script>
+</body>
+</html>
